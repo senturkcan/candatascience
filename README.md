@@ -10,7 +10,7 @@ My personal library for data-related programming, primarily focused on data scie
 
 ## Installation
 ```bash
-pip install git+https://github.com/yourusername/candatascience.git
+pip install git+https://github.com/senturkcan/candatascience.git
 ```
 
 ## Usage
