@@ -1,2 +1,29 @@
 # candatascience
-My personal library for data related programming. Primarily focused on data science. Has functions for data preprocessing and machine learning. Generally used Python with the numpy, pandas, scikitlearn, tensorflow, keras libraries.
+
+My personal library for data-related programming, primarily focused on data science.
+
+## Features
+
+- Data preprocessing utilities
+- Machine learning helper functions
+- Built on top of numpy, pandas, scikit-learn, tensorflow, and keras
+
+## Installation
+```bash
+pip install git+https://github.com/yourusername/candatascience.git
+```
+
+## Usage
+```python
+from candatascience import #function
+
+
+```
+
+## Dependencies
+
+- numpy
+- pandas
+- scikit-learn
+- tensorflow
+- keras
