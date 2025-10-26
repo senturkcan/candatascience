@@ -1,5 +1,4 @@
 """All utility functions"""
 
-def remove_outliers():
-    # code
-    pass
+def arrange_ds():
+    """"""

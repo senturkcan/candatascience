@@ -21,5 +21,8 @@ setup(
         "scikit-learn>=0.24.0",
         "tensorflow>=2.5.0",
         "keras>=2.4.0",
+        "os",
+        "seaborn",
+        "matplotlib.pyplot"
     ],
 )
