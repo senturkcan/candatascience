@@ -22,6 +22,6 @@ setup(
         "tensorflow>=2.5.0",
         "keras>=2.4.0",
         "seaborn",
-        "matplotlib.pyplot"
+        "matplotlib>=3.3.0",
     ],
 )
