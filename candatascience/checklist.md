@@ -1,15 +1,19 @@
 End to End Professional Machine Learning Application Checklist
 
 0- enviorment & version control setup
+for .venv
 for mac: 
 python3 -m venv .venv
 source .venv/bin/activate
-
 for windows:
 python -m venv .venv
 .venv\Scripts\activate
-
 (to deactivate write, deactivate )
+
+for conda
+conda create -n myenv python=3.12
+conda activate myenv
+(to deactivate write, conda deactivate )
 
 install and import required libraries. for this library:
 First time installation:

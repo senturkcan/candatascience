@@ -1,4 +1,4 @@
-"""All utility functions"""
+import candatascience as cds
 
 def arrange_ds():
     """"""
@@ -126,4 +126,5 @@ def analyze_csv():
 if __name__ == "__main__":
     df = analyze_csv()
     print("\nAnalysis complete! Results saved to CSV files and PNG images.")
+
 
