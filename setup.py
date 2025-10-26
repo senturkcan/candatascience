@@ -12,7 +12,7 @@ setup(
     description="Personal library for data science and machine learning",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/cansenturk1/candatascience",
+    url="https://github.com/senturkcan/candatascience",
     packages=find_packages(),
     python_requires=">=3.7",
     install_requires=[
@@ -21,7 +21,6 @@ setup(
         "scikit-learn>=0.24.0",
         "tensorflow>=2.5.0",
         "keras>=2.4.0",
-        "os",
         "seaborn",
         "matplotlib.pyplot"
     ],
