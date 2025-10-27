@@ -41,16 +41,16 @@ istatistiksel düzeltmelerse scaling gibidir testle beraber yapılmamalıdır
 *: fit on training set apply on test set (to avoid data leakage)
 
 opt. 8- feature extraction
-! eğer linear modals, neural nets, svm, pca, lda, autoencoder ile extraction yapılacaksa scaling yapılmış olmalı.
+! eğer linear models, neural nets, svm, pca, lda, autoencoder ile extraction yapılacaksa scaling yapılmış olmalı.
 diğerlerinde yapılmamış olması daha iyidir örn. RF, XGBoost. yani 7, 8 sırası buna göre belirlenmelidir ama genelde önce scaling yapılır.
 
-9- modal selection and hyperparameter validation setup
+9- model selection and hyperparameter validation setup
 -fit
 
-opt. 10- comparing and combining diffrent modals on validation
+opt. 10- comparing and combining diffrent models on validation
 
-11- evaluating the choosen modal cumerically and visually
+11- evaluating the choosen model cumerically and visually
 
 opt. 12- feature importance metrics for more insights about the dataset
 
-13- prepare the modal for production phase (launch)
+13- prepare the model for production phase (launch)
