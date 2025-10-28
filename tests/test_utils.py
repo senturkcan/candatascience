@@ -1,4 +1,3 @@
-import candatascience as cds
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,7 +13,7 @@ import numpy as np
 import sqlite3
 from pathlib import Path
 
-def extract(label_column, dataset_path="", dataset_full_path="", file_type=None, 
+def extract(label_column = None, dataset_path="", dataset_full_path="", file_type=None, 
             header='infer', clean_data=True, remove_duplicate=False, sql_query=None, sql_table=None):
     """
     Extract features and labels from various dataset file formats with automatic cleaning.
@@ -53,6 +52,8 @@ def extract(label_column, dataset_path="", dataset_full_path="", file_type=None,
     # File path validation
     if not file_path:
         raise ValueError("Error: Provide either dataset_path or dataset_full_path")
+    
+    file_path = os.path.abspath(file_path)
     
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Error: File '{file_path}' not found")
@@ -199,7 +200,10 @@ def extract(label_column, dataset_path="", dataset_full_path="", file_type=None,
         print("Initial data cleaning completed")
     
     # Extract features and labels
-    if isinstance(label_column, int):
+
+    if label_column == None:
+        pass
+    elif isinstance(label_column, int):
         # Validate column index
         if label_column < 0 or label_column >= len(ds.columns):
             raise IndexError(f"Column index {label_column} is out of range. "
@@ -272,7 +276,6 @@ def _clean_dataframe(df, remove_duplicate):
 
 
 # Example usage:
-if __name__ == "__main__":
     # Auto-detect file type from extension
     # ds, x, y = extract(label_column="target", dataset_path="data.csv")
     
@@ -296,21 +299,20 @@ if __name__ == "__main__":
 
 
 
-def initial_analysis(dataframe=ds):
-    dataframe = ds
+def initial_analysis(df):
     # Display basic information
     print("\n===== Basic Dataset Information =====")
-    print(f"Dataset shape: {ds.shape}")
-    print(f"Number of rows: {ds.shape[0]}")
-    print(f"Number of columns: {ds.shape[1]}")
+    print(f"Dataset shape: {df.shape}")
+    print(f"Number of rows: {df.shape[0]}")
+    print(f"Number of columns: {df.shape[1]}")
 
     # Count NaN values for each column
     print("\n===== NaN Values Analysis =====")
-    nan_counts = ds.isna().sum().sort_values(ascending=False)
-    nan_percentage = (ds.isna().sum() / len(ds) * 100).sort_values(ascending=False)
+    nan_counts = df.isna().sum().sort_values(ascending=False)
+    nan_percentage = (df.isna().sum() / len(df) * 100).sort_values(ascending=False)
 
     # Create a DataFrame to display NaN counts and percentages
-    nan_summary = pd.DataFrame({
+    nan_summary = pd.df({
         'NaN Count': nan_counts,
         'NaN Percentage': nan_percentage.round(2)
     })
@@ -327,9 +329,9 @@ def initial_analysis(dataframe=ds):
 
     # Basic statistics for numeric columns
     print("\n===== Numeric Data Statistics =====")
-    numeric_cols = ds.select_dtypes(include=[np.number]).columns
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
     if len(numeric_cols) > 0:
-        numeric_stats = ds[numeric_cols].describe()
+        numeric_stats = df[numeric_cols].describe()
         print(numeric_stats)
         numeric_stats.to_csv('numeric_statistics.csv')
         print("Numeric statistics saved to 'numeric_statistics.csv'")
@@ -351,15 +353,8 @@ def initial_analysis(dataframe=ds):
 
     pass
 
-if __name__ == "__main__":
-    ds = initial_analysis()
-    print("\nAnalysis complete! Results saved to CSV files and PNG images.")
 
 
-def main_analysis():
-    print(f"Dataset shape: {ds.shape}")
-    print(f"Features(x) shape: {x.shape}")
-    print(f"Label(y) shape: {y.shape}")
 
 
 import pandas as pd
@@ -369,7 +364,8 @@ import seaborn as sns
 from scipy import stats
 from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
 
-def exploratory_analysis(df, target_column=None, task_type='classification', top_n_features=10):
+def main_analysis(df, label_column=None, task_type='regression', top_n_features=10):
+
     """
     Perform comprehensive Exploratory Data Analysis with feature relationship insights after missig value handling.
     
@@ -377,10 +373,10 @@ def exploratory_analysis(df, target_column=None, task_type='classification', top
     -----------
     df : pandas.DataFrame
         The dataset to analyze (assumes already cleaned if extract() was used with clean_data=True)
-    target_column : str or int, optional
+    label_column : str or int, optional
         Target/label column name or index. If None, only descriptive analysis is performed
     task_type : str, default 'auto'
-        Type of ML task: 'classification', 'regression', or 'auto' (auto-detect from target)
+        Type of ML task: 'classification', 'regression'
     top_n_features : int, default 10
         Number of top features to display in importance analysis
     
@@ -388,6 +384,8 @@ def exploratory_analysis(df, target_column=None, task_type='classification', top
     --------
     dict : Analysis results containing insights for modeling decisions
     """
+    
+
     
     print("="*70)
     print("EXPLORATORY DATA ANALYSIS REPORT")
@@ -398,6 +396,11 @@ def exploratory_analysis(df, target_column=None, task_type='classification', top
     # 1. BASIC DATASET INFORMATION
     print("\n[1] DATASET OVERVIEW")
     print("-"*70)
+
+    print(f"Dataset shape: {df.shape}")
+    print(f"Features(x) shape: {x.shape}")
+    print(f"Label(y) shape: {y.shape}")
+
     print(f"Shape: {df.shape[0]} rows × {df.shape[1]} columns")
     print(f"Memory Usage: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
     
@@ -442,22 +445,23 @@ def exploratory_analysis(df, target_column=None, task_type='classification', top
     results['missing_data'] = missing_df.to_dict() if total_missing > 0 else {}
     
     # 4. TARGET VARIABLE ANALYSIS
-    if target_column is not None:
+    if label_column is not None:
         print("\n[3] TARGET VARIABLE ANALYSIS")
         print("-"*70)
         
         # Get target column
-        if isinstance(target_column, int):
-            target = df.iloc[:, target_column]
-            target_name = df.columns[target_column]
+        if isinstance(label_column, int):
+            target = df.iloc[:, label_column]
+            target_name = df.columns[label_column]
         else:
-            target = df[target_column]
-            target_name = target_column
+            target = df[label_column]
+            target_name = label_column
         
         print(f"Target: {target_name}")
         
         #  task type
-        
+        if label_column is not None:
+            task_type = 'classification'
         print(f"Task Type: {task_type.upper()}")
         results['task_type'] = task_type
         
@@ -605,7 +609,7 @@ def exploratory_analysis(df, target_column=None, task_type='classification', top
     print("\n[7] DIMENSIONALITY ANALYSIS")
     print("-"*70)
     
-    n_features = df.shape[1] - (1 if target_column is not None else 0)
+    n_features = df.shape[1] - (1 if label_column is not None else 0)
     n_samples = df.shape[0]
     ratio = n_samples / n_features
     
@@ -618,16 +622,222 @@ def exploratory_analysis(df, target_column=None, task_type='classification', top
     
     return results
 
+import pandas as pd
+import numpy as np
+from scipy import stats
+import warnings
+warnings.filterwarnings('ignore')
+
+class OutlierDetector:
+    """
+    Detects anomalies/outliers in datasets using multiple methods.
+    Saves flagged rows for review and provides easy removal functionality.
+    """
+    
+    def __init__(self, df, output_file='potential_mistakes.csv'):
+        """
+        Initialize the detector.
+        
+        Args:
+            df: pandas DataFrame to analyze
+            output_file: CSV filename to save potential mistakes
+        """
+        self.df = df.copy()
+        self.df['original_index'] = df.index
+        self.output_file = output_file
+        self.outliers = pd.DataFrame()
+        
+    def detect_outliers(self, methods=['zscore', 'iqr', 'isolation'], 
+                       z_threshold=3, iqr_multiplier=1.5):
+        """
+        Detect outliers using multiple methods.
+        
+        Args:
+            methods: List of methods to use ['zscore', 'iqr', 'isolation']
+            z_threshold: Z-score threshold (default: 3)
+            iqr_multiplier: IQR multiplier (default: 1.5)
+        """
+        outlier_indices = set()
+        numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if 'original_index' in numeric_cols:
+            numeric_cols.remove('original_index')
+        
+        if not numeric_cols:
+            print("No numeric columns found for outlier detection!")
+            return self
+        
+        results = []
+        
+        # Z-Score Method
+        if 'zscore' in methods:
+            print(f"Applying Z-Score method (threshold={z_threshold})...")
+            for col in numeric_cols:
+                z_scores = np.abs(stats.zscore(self.df[col].dropna()))
+                outlier_mask = z_scores > z_threshold
+                outlier_idx = self.df[col].dropna().index[outlier_mask]
+                
+                for idx in outlier_idx:
+                    outlier_indices.add(idx)
+                    results.append({
+                        'original_index': self.df.loc[idx, 'original_index'],
+                        'method': 'Z-Score',
+                        'column': col,
+                        'value': self.df.loc[idx, col],
+                        'z_score': z_scores[self.df[col].dropna().index.get_loc(idx)],
+                        'reason': f'Z-score={z_scores[self.df[col].dropna().index.get_loc(idx)]:.2f} > {z_threshold}'
+                    })
+        
+        # IQR Method
+        if 'iqr' in methods:
+            print(f"Applying IQR method (multiplier={iqr_multiplier})...")
+            for col in numeric_cols:
+                Q1 = self.df[col].quantile(0.25)
+                Q3 = self.df[col].quantile(0.75)
+                IQR = Q3 - Q1
+                lower_bound = Q1 - iqr_multiplier * IQR
+                upper_bound = Q3 + iqr_multiplier * IQR
+                
+                outlier_mask = (self.df[col] < lower_bound) | (self.df[col] > upper_bound)
+                outlier_idx = self.df[outlier_mask].index
+                
+                for idx in outlier_idx:
+                    outlier_indices.add(idx)
+                    val = self.df.loc[idx, col]
+                    results.append({
+                        'original_index': self.df.loc[idx, 'original_index'],
+                        'method': 'IQR',
+                        'column': col,
+                        'value': val,
+                        'lower_bound': lower_bound,
+                        'upper_bound': upper_bound,
+                        'reason': f'Value {val:.2f} outside [{lower_bound:.2f}, {upper_bound:.2f}]'
+                    })
+        
+        # Isolation Forest Method
+        if 'isolation' in methods:
+            try:
+                from sklearn.ensemble import IsolationForest
+                print("Applying Isolation Forest method...")
+                
+                iso_data = self.df[numeric_cols].fillna(self.df[numeric_cols].median())
+                iso_forest = IsolationForest(contamination=0.1, random_state=42)
+                predictions = iso_forest.fit_predict(iso_data)
+                
+                outlier_mask = predictions == -1
+                outlier_idx = self.df[outlier_mask].index
+                
+                for idx in outlier_idx:
+                    outlier_indices.add(idx)
+                    results.append({
+                        'original_index': self.df.loc[idx, 'original_index'],
+                        'method': 'Isolation Forest',
+                        'column': 'Multiple',
+                        'value': 'N/A',
+                        'reason': 'Flagged as anomaly by Isolation Forest'
+                    })
+            except ImportError:
+                print("Scikit-learn not available. Skipping Isolation Forest method.")
+        
+        # Create outliers DataFrame
+        if results:
+            self.outliers = pd.DataFrame(results)
+            
+            # Add all row data for flagged indices
+            full_outliers = []
+            for idx in sorted(outlier_indices):
+                row_data = self.df.loc[idx].to_dict()
+                flags = self.outliers[self.outliers['original_index'] == row_data['original_index']]
+                row_data['detection_methods'] = ', '.join(flags['method'].unique())
+                row_data['flagged_columns'] = ', '.join(flags['column'].unique())
+                row_data['reasons'] = ' | '.join(flags['reason'].unique())
+                full_outliers.append(row_data)
+            
+            self.outliers = pd.DataFrame(full_outliers)
+            
+            # Save to CSV
+            self.outliers.to_csv(self.output_file, index=False)
+            print(f"\n✓ Found {len(self.outliers)} potential mistakes")
+            print(f"✓ Saved to '{self.output_file}'")
+            print(f"\nTop flagged rows:")
+            print(self.outliers[['original_index', 'detection_methods', 'flagged_columns']].head(10))
+        else:
+            print("No outliers detected!")
+        
+        return self
+    
+    def get_outliers(self):
+        """Return the DataFrame of detected outliers."""
+        return self.outliers
+    
+    @staticmethod
+    def remove_rows(df, indices_to_remove):
+        """
+        Remove confirmed mistakes from the dataset after manual review.
+        
+        Args:
+            df: DataFrame to clean
+            indices_to_remove: List of row indices to remove
+            
+        Returns:
+            Cleaned DataFrame
+        """
+        df_clean = df.drop(indices_to_remove, errors='ignore')
+        removed_count = len(df) - len(df_clean)
+        print(f"✓ Removed {removed_count} rows")
+        print(f"  Original size: {len(df)}, New size: {len(df_clean)}")
+        return df_clean
+
+
+# ============= USAGE EXAMPLE =============
+
+if __name__ == "__main__":
+    # Example 1: Load your data
+    # df = pd.read_csv('your_data.csv')
+    
+    # Creating sample data with outliers for demonstration
+    np.random.seed(42)
+    df = pd.DataFrame({
+        'age': np.random.normal(30, 5, 100).tolist() + [150, -10, 200],  # outliers
+        'salary': np.random.normal(50000, 10000, 100).tolist() + [500000, -5000, 1000000],
+        'score': np.random.normal(75, 10, 100).tolist() + [150, -20, 999],
+        'category': np.random.choice(['A', 'B', 'C'], 103)
+    })
+    
+    print("Dataset shape:", df.shape)
+    print("\nDetecting outliers...\n")
+    
+    # Step 1: Detect outliers
+    detector = OutlierDetector(df, output_file='potential_mistakes.csv')
+    detector.detect_outliers(
+        methods=['zscore', 'iqr', 'isolation'],
+        z_threshold=3,
+        iqr_multiplier=1.5
+    )
+    
+    # Step 2: Review the CSV file 'potential_mistakes.csv'
+    # Examine the flagged rows and decide which ones are actual mistakes
+    
+    # Step 3: Remove confirmed mistakes
+    # After reviewing, specify which original_index values to remove
+    indices_to_remove = [100, 101, 102]  # Example: these were confirmed as mistakes
+    
+    df_cleaned = detector.remove_outliers(indices_to_remove, df)
+    
+    # Save cleaned data
+    # df_cleaned.to_csv('cleaned_data.csv', index=False)
+    
+    print("\nCleaning complete!")
+
 
 # Example usage:
 if __name__ == "__main__":
-    # After using extract() function:
-    # ds, x, y = extract(label_column='target', dataset_path='data.csv')
+    ds, x, y = extract(label_column="GENHLTH",dataset_path="2021.csv")
+
+    from sklearn.model_selection import train_test_split
+    x_train, x_test, y_train, y_test = train_test_split(
+        x, y, test_size=0.2, stratify=y, random_state=42
+        )
     
-    # Run EDA on the full dataset
-    # results = exploratory_analysis(ds, target_column='target')
-    
-    # The results dict contains all insights for programmatic use
-    pass
 
 
