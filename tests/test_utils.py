@@ -623,216 +623,318 @@ from scipy import stats
 import warnings
 warnings.filterwarnings('ignore')
 
-class OutlierDetector:
+from keras.datasets import mnist
+
+(x_train, y_train),(x_test, y_test) = mnist.load_data()
+import pandas as pd
+import numpy as np
+from scipy import stats
+import warnings
+warnings.filterwarnings('ignore')
+
+
+class MLOutlierDetector:
     """
-    Detects anomalies/outliers in datasets using multiple methods.
-    Saves flagged rows for review and provides easy removal functionality.
+    Detects potential mislabeled instances and extreme feature values
+    for machine learning classification tasks.
     """
     
-    def __init__(self, df, output_file='potential_mistakes.csv'):
+    def __init__(self, X, y, output_file='potential_mistakes.csv'):
         """
         Initialize the detector.
         
         Args:
-            df: pandas DataFrame to analyze
+            X: Features DataFrame
+            y: Labels Series/DataFrame
             output_file: CSV filename to save potential mistakes
         """
-        self.df = df.copy()
-        self.df['original_index'] = df.index
+        self.X = X.copy()
+        self.y = y.copy() if isinstance(y, pd.Series) else y.copy().squeeze()
+        self.X['original_index'] = X.index
         self.output_file = output_file
-        self.outliers = pd.DataFrame()
         
-    def detect_outliers(self, methods=['zscore', 'iqr', 'isolation'], 
-                       z_threshold=3, iqr_multiplier=1.5):
+    def detect_mislabeled(self, method='knn', n_neighbors=5, contamination=0.1):
         """
-        Detect outliers using multiple methods.
+        Detect potentially mislabeled instances - MAIN FUNCTIONALITY.
         
         Args:
-            methods: List of methods to use ['zscore', 'iqr', 'isolation']
-            z_threshold: Z-score threshold (default: 3)
-            iqr_multiplier: IQR multiplier (default: 1.5)
-        """
-        outlier_indices = set()
-        numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
+            method: 'knn' (K-Nearest Neighbors) or 'isolation' (Isolation Forest per class)
+            n_neighbors: Number of neighbors to check (for KNN method)
+            contamination: Expected proportion of outliers (for isolation method)
         
+        Returns:
+            DataFrame with suspected mislabeled instances
+        """
+        print(f"\n{'='*60}")
+        print("DETECTING POTENTIALLY MISLABELED INSTANCES")
+        print(f"{'='*60}\n")
+        
+        results = []
+        numeric_cols = self.X.select_dtypes(include=[np.number]).columns.tolist()
         if 'original_index' in numeric_cols:
             numeric_cols.remove('original_index')
         
-        if not numeric_cols:
-            print("No numeric columns found for outlier detection!")
-            return self
-        
-        results = []
-        
-        # Z-Score Method
-        if 'zscore' in methods:
-            print(f"Applying Z-Score method (threshold={z_threshold})...")
-            for col in numeric_cols:
-                z_scores = np.abs(stats.zscore(self.df[col].dropna()))
-                outlier_mask = z_scores > z_threshold
-                outlier_idx = self.df[col].dropna().index[outlier_mask]
+        if method == 'knn':
+            print(f"Using KNN method with {n_neighbors} neighbors...")
+            from sklearn.neighbors import NearestNeighbors
+            
+            # Standardize features
+            X_std = (self.X[numeric_cols] - self.X[numeric_cols].mean()) / self.X[numeric_cols].std()
+            X_std = X_std.fillna(0)
+            
+            # Find nearest neighbors
+            knn = NearestNeighbors(n_neighbors=n_neighbors + 1)
+            knn.fit(X_std)
+            distances, indices = knn.kneighbors(X_std)
+            
+            # Check label consistency with neighbors
+            for i in range(len(self.X)):
+                neighbor_indices = indices[i][1:]  # Exclude self
+                neighbor_labels = self.y.iloc[neighbor_indices]
+                current_label = self.y.iloc[i]
                 
-                for idx in outlier_idx:
-                    outlier_indices.add(idx)
+                # Count how many neighbors have different labels
+                different_labels = (neighbor_labels != current_label).sum()
+                agreement_ratio = 1 - (different_labels / n_neighbors)
+                
+                # Flag if minority among neighbors
+                if different_labels >= n_neighbors * 0.6:  # 60% or more disagree
+                    neighbor_label_counts = neighbor_labels.value_counts()
+                    suggested_label = neighbor_label_counts.index[0]
+                    
                     results.append({
-                        'original_index': self.df.loc[idx, 'original_index'],
-                        'method': 'Z-Score',
-                        'column': col,
-                        'value': self.df.loc[idx, col],
-                        'z_score': z_scores[self.df[col].dropna().index.get_loc(idx)],
-                        'reason': f'Z-score={z_scores[self.df[col].dropna().index.get_loc(idx)]:.2f} > {z_threshold}'
+                        'original_index': self.X.iloc[i]['original_index'],
+                        'current_label': current_label,
+                        'suggested_label': suggested_label,
+                        'neighbor_agreement': f"{agreement_ratio:.1%}",
+                        'neighbors_with_different_label': different_labels,
+                        'avg_distance_to_neighbors': distances[i][1:].mean(),
+                        'confidence': 'HIGH' if different_labels >= n_neighbors * 0.8 else 'MEDIUM',
+                        'reason': f'{different_labels}/{n_neighbors} neighbors have different labels'
                     })
         
-        # IQR Method
-        if 'iqr' in methods:
-            print(f"Applying IQR method (multiplier={iqr_multiplier})...")
-            for col in numeric_cols:
-                Q1 = self.df[col].quantile(0.25)
-                Q3 = self.df[col].quantile(0.75)
-                IQR = Q3 - Q1
-                lower_bound = Q1 - iqr_multiplier * IQR
-                upper_bound = Q3 + iqr_multiplier * IQR
+        elif method == 'isolation':
+            print(f"Using Isolation Forest per class (contamination={contamination})...")
+            from sklearn.ensemble import IsolationForest
+            
+            X_std = (self.X[numeric_cols] - self.X[numeric_cols].mean()) / self.X[numeric_cols].std()
+            X_std = X_std.fillna(0)
+            
+            # Check each class separately
+            for label in self.y.unique():
+                class_mask = self.y == label
+                class_indices = self.X[class_mask].index
+                X_class = X_std[class_mask]
                 
-                outlier_mask = (self.df[col] < lower_bound) | (self.df[col] > upper_bound)
-                outlier_idx = self.df[outlier_mask].index
+                if len(X_class) < 3:
+                    continue
                 
-                for idx in outlier_idx:
-                    outlier_indices.add(idx)
-                    val = self.df.loc[idx, col]
-                    results.append({
-                        'original_index': self.df.loc[idx, 'original_index'],
-                        'method': 'IQR',
-                        'column': col,
-                        'value': val,
-                        'lower_bound': lower_bound,
-                        'upper_bound': upper_bound,
-                        'reason': f'Value {val:.2f} outside [{lower_bound:.2f}, {upper_bound:.2f}]'
-                    })
-        
-        # Isolation Forest Method
-        if 'isolation' in methods:
-            try:
-                from sklearn.ensemble import IsolationForest
-                print("Applying Isolation Forest method...")
-                
-                iso_data = self.df[numeric_cols].fillna(self.df[numeric_cols].median())
-                iso_forest = IsolationForest(contamination=0.1, random_state=42)
-                predictions = iso_forest.fit_predict(iso_data)
+                iso = IsolationForest(contamination=min(contamination, 0.5), random_state=42)
+                predictions = iso.fit_predict(X_class)
                 
                 outlier_mask = predictions == -1
-                outlier_idx = self.df[outlier_mask].index
+                outlier_indices = X_class[outlier_mask].index
                 
-                for idx in outlier_idx:
-                    outlier_indices.add(idx)
+                for idx in outlier_indices:
+                    loc = self.X.index.get_loc(idx)
                     results.append({
-                        'original_index': self.df.loc[idx, 'original_index'],
-                        'method': 'Isolation Forest',
-                        'column': 'Multiple',
-                        'value': 'N/A',
-                        'reason': 'Flagged as anomaly by Isolation Forest'
+                        'original_index': self.X.iloc[loc]['original_index'],
+                        'current_label': label,
+                        'suggested_label': 'REVIEW',
+                        'neighbor_agreement': 'N/A',
+                        'neighbors_with_different_label': 'N/A',
+                        'avg_distance_to_neighbors': 'N/A',
+                        'confidence': 'MEDIUM',
+                        'reason': f'Anomalous features for class {label}'
                     })
-            except ImportError:
-                print("Scikit-learn not available. Skipping Isolation Forest method.")
         
-        # Create outliers DataFrame
         if results:
-            self.outliers = pd.DataFrame(results)
+            mislabeled_df = pd.DataFrame(results)
             
-            # Add all row data for flagged indices
-            full_outliers = []
-            for idx in sorted(outlier_indices):
-                row_data = self.df.loc[idx].to_dict()
-                flags = self.outliers[self.outliers['original_index'] == row_data['original_index']]
-                row_data['detection_methods'] = ', '.join(flags['method'].unique())
-                row_data['flagged_columns'] = ', '.join(flags['column'].unique())
-                row_data['reasons'] = ' | '.join(flags['reason'].unique())
-                full_outliers.append(row_data)
+            # Add feature values for context
+            for idx in mislabeled_df['original_index']:
+                row_loc = self.X[self.X['original_index'] == idx].index[0]
+                for col in numeric_cols[:5]:  # Add first 5 features
+                    mislabeled_df.loc[mislabeled_df['original_index'] == idx, col] = self.X.loc[row_loc, col]
             
-            self.outliers = pd.DataFrame(full_outliers)
+            mislabeled_df = mislabeled_df.sort_values('confidence', ascending=False)
             
-            # Save to CSV
-            self.outliers.to_csv(self.output_file, index=False)
-            print(f"\n✓ Found {len(self.outliers)} potential mistakes")
-            print(f"✓ Saved to '{self.output_file}'")
-            print(f"\nTop flagged rows:")
-            print(self.outliers[['original_index', 'detection_methods', 'flagged_columns']].head(10))
+            print(f"\n✓ Found {len(mislabeled_df)} potentially mislabeled instances")
+            print(f"\nTop suspected mislabels:")
+            print(mislabeled_df[['original_index', 'current_label', 'suggested_label', 'confidence', 'reason']].head(10).to_string(index=False))
+            
+            return mislabeled_df
         else:
-            print("No outliers detected!")
-        
-        return self
+            print("No mislabeled instances detected!")
+            return pd.DataFrame()
     
-    def get_outliers(self):
-        """Return the DataFrame of detected outliers."""
-        return self.outliers
-    
-    @staticmethod
-    def remove_rows(df, indices_to_remove):
+    def detect_extreme_features(self, z_threshold=4, iqr_multiplier=3):
         """
-        Remove confirmed mistakes from the dataset after manual review.
+        Detect extreme feature values - SECONDARY FUNCTIONALITY.
+        Uses simple statistical methods.
         
         Args:
-            df: DataFrame to clean
+            z_threshold: Z-score threshold (higher = only very extreme values)
+            iqr_multiplier: IQR multiplier (higher = only very extreme values)
+        
+        Returns:
+            DataFrame with extreme feature values
+        """
+        print(f"\n{'='*60}")
+        print("DETECTING EXTREME FEATURE VALUES")
+        print(f"{'='*60}\n")
+        
+        results = []
+        numeric_cols = self.X.select_dtypes(include=[np.number]).columns.tolist()
+        if 'original_index' in numeric_cols:
+            numeric_cols.remove('original_index')
+        
+        print(f"Using Z-Score (threshold={z_threshold}) and IQR (multiplier={iqr_multiplier})...\n")
+        
+        for col in numeric_cols:
+            col_data = self.X[col].dropna()
+            
+            # Z-Score method
+            z_scores = np.abs(stats.zscore(col_data))
+            z_outliers = z_scores > z_threshold
+            
+            # IQR method
+            Q1 = col_data.quantile(0.25)
+            Q3 = col_data.quantile(0.75)
+            IQR = Q3 - Q1
+            lower = Q1 - iqr_multiplier * IQR
+            upper = Q3 + iqr_multiplier * IQR
+            iqr_outliers = (col_data < lower) | (col_data > upper)
+            
+            # Combine both methods
+            combined_outliers = z_outliers | iqr_outliers
+            outlier_indices = col_data[combined_outliers].index
+            
+            for idx in outlier_indices:
+                value = self.X.loc[idx, col]
+                z_score = z_scores[col_data.index.get_loc(idx)]
+                
+                results.append({
+                    'original_index': self.X.loc[idx, 'original_index'],
+                    'feature': col,
+                    'value': value,
+                    'z_score': f"{z_score:.2f}",
+                    'iqr_range': f"[{lower:.2f}, {upper:.2f}]",
+                    'label': self.y.loc[idx],
+                    'severity': 'EXTREME' if z_score > z_threshold * 1.5 else 'HIGH',
+                    'reason': f'Z-score={z_score:.2f}, outside IQR range'
+                })
+        
+        if results:
+            extreme_df = pd.DataFrame(results)
+            extreme_df = extreme_df.sort_values('z_score', ascending=False)
+            
+            print(f"✓ Found {len(extreme_df)} extreme feature values across {extreme_df['original_index'].nunique()} rows")
+            print(f"\nTop extreme values:")
+            print(extreme_df[['original_index', 'feature', 'value', 'z_score', 'severity']].head(10).to_string(index=False))
+            
+            return extreme_df
+        else:
+            print("No extreme feature values detected!")
+            return pd.DataFrame()
+    
+    def detect_all(self, save_separate=True, **kwargs):
+        """
+        Run both detection methods and save results.
+        
+        Args:
+            save_separate: If True, save mislabels and extremes in separate CSVs
+            **kwargs: Arguments for detection methods
+        """
+        # Detect mislabeled (MAIN)
+        mislabeled = self.detect_mislabeled(
+            method=kwargs.get('mislabel_method', 'knn'),
+            n_neighbors=kwargs.get('n_neighbors', 5),
+            contamination=kwargs.get('contamination', 0.1)
+        )
+        
+        # Detect extreme features (SECONDARY)
+        extreme = self.detect_extreme_features(
+            z_threshold=kwargs.get('z_threshold', 4),
+            iqr_multiplier=kwargs.get('iqr_multiplier', 3)
+        )
+        
+        # Save results
+        if save_separate:
+            if not mislabeled.empty:
+                mislabeled.to_csv('mislabeled_instances.csv', index=False)
+                print(f"\n✓ Saved to 'mislabeled_instances.csv'")
+            
+            if not extreme.empty:
+                extreme.to_csv('extreme_features.csv', index=False)
+                print(f"✓ Saved to 'extreme_features.csv'")
+        else:
+            # Combine both
+            if not mislabeled.empty or not extreme.empty:
+                mislabeled['type'] = 'MISLABEL'
+                extreme['type'] = 'EXTREME_FEATURE'
+                combined = pd.concat([mislabeled, extreme], ignore_index=True)
+                combined.to_csv(self.output_file, index=False)
+                print(f"\n✓ Saved to '{self.output_file}'")
+        
+        return mislabeled, extreme
+    
+    @staticmethod
+    def remove_rows(X, y, indices_to_remove):
+        """
+        Remove confirmed mistakes after manual review.
+        
+        Args:
+            X: Features DataFrame
+            y: Labels Series/DataFrame
             indices_to_remove: List of row indices to remove
             
         Returns:
-            Cleaned DataFrame
+            Cleaned X and y
         """
-        df_clean = df.drop(indices_to_remove, errors='ignore')
-        removed_count = len(df) - len(df_clean)
-        print(f"✓ Removed {removed_count} rows")
-        print(f"  Original size: {len(df)}, New size: {len(df_clean)}")
-        return df_clean
+        X_clean = X.drop(indices_to_remove, errors='ignore')
+        y_clean = y.drop(indices_to_remove, errors='ignore')
+        
+        removed = len(X) - len(X_clean)
+        print(f"\n✓ Removed {removed} rows")
+        print(f"  X: {len(X)} → {len(X_clean)}")
+        print(f"  y: {len(y)} → {len(y_clean)}")
+        
+        return X_clean, y_clean
 
 
 # ============= USAGE EXAMPLE =============
 
-if __name__ == "__main__":
-    # Example 1: Load your data
-    # df = pd.read_csv('your_data.csv')
-    
-    # Creating sample data with outliers for demonstration
-    np.random.seed(42)
-    df = pd.DataFrame({
-        'age': np.random.normal(30, 5, 100).tolist() + [150, -10, 200],  # outliers
-        'salary': np.random.normal(50000, 10000, 100).tolist() + [500000, -5000, 1000000],
-        'score': np.random.normal(75, 10, 100).tolist() + [150, -20, 999],
-        'category': np.random.choice(['A', 'B', 'C'], 103)
-    })
-    
-    print("Dataset shape:", df.shape)
-    print("\nDetecting outliers...\n")
-    
-    # Step 1: Detect outliers
-    detector = OutlierDetector(df, output_file='potential_mistakes.csv')
-    detector.detect_outliers(
-        methods=['zscore', 'iqr', 'isolation'],
-        z_threshold=3,
-        iqr_multiplier=1.5
-    )
-    
-    # Step 2: Review the CSV file 'potential_mistakes.csv'
-    # Examine the flagged rows and decide which ones are actual mistakes
-    
-    # Step 3: Remove confirmed mistakes
-    # After reviewing, specify which original_index values to remove
-    indices_to_remove = [100, 101, 102]  # Example: these were confirmed as mistakes
-    
-    df_cleaned = detector.remove_outliers(indices_to_remove, df)
-    
-    # Save cleaned data
-    # df_cleaned.to_csv('cleaned_data.csv', index=False)
-    
-    print("\nCleaning complete!")
+# STEP 1: DETECT MISLABELED INSTANCES (MAIN FUNCTIONALITY)
+detector = MLOutlierDetector(x, y)
+
+# Option A: Only detect mislabeled instances
+mislabeled = detector.detect_mislabeled(method='knn', n_neighbors=5)
+mislabeled.to_csv('mislabeled_instances.csv', index=False)
+
+# Option B: Detect both mislabeled + extreme features
+mislabeled, extreme = detector.detect_all(
+    save_separate=True,          # Save in separate CSV files
+    mislabel_method='knn',       # 'knn' or 'isolation'
+    n_neighbors=5,               # For KNN
+    z_threshold=4,               # For extreme features (higher = stricter)
+    iqr_multiplier=3             # For extreme features (higher = stricter)
+)
 
 
-# Example usage:
-if __name__ == "__main__":
-    ds, x, y = extract(label_column="GENHLTH",dataset_path="2021.csv")
+# STEP 2: MANUAL REVIEW
+# Review 'mislabeled_instances.csv' and 'extreme_features.csv'
+# Identify actual mistakes
 
-    from sklearn.model_selection import train_test_split
-    x_train, x_test, y_train, y_test = train_test_split(
-        x, y, test_size=0.2, stratify=y, random_state=42
-        )
+
+# STEP 3: REMOVE CONFIRMED MISTAKES
+# After reviewing, use row indices to remove them
+x_clean, y_clean = MLOutlierDetector.remove_rows(x, y, [45, 67, 89, 103])
+
+# Save cleaned data
+# x_clean.to_csv('x_cleaned.csv', index=False)
+# y_clean.to_csv('y_cleaned.csv', index=False)
+
     
 
 
