@@ -63,6 +63,7 @@ def extract(label_column = None, dataset_path="", dataset_full_path="", file_typ
             '.csv': 'csv',
             '.tsv': 'tsv',
             '.txt': 'csv',  # Assume txt is comma-delimited by default
+            '.data': 'csv',
             '.xlsx': 'xlsx',
             '.xls': 'xls',
             '.json': 'json',
@@ -96,7 +97,7 @@ def extract(label_column = None, dataset_path="", dataset_full_path="", file_typ
     print(f"Loading dataset from '{file_path}' (format: {file_type})...")
     
     try:
-        if file_type == "csv":
+        if file_type in ["csv","data"]:
             ds = pd.read_csv(file_path, delimiter=",", low_memory=False, header=header)
         
         elif file_type == "tsv":
@@ -307,7 +308,7 @@ def initial_analysis(df):
     nan_percentage = (df.isna().sum() / len(df) * 100).sort_values(ascending=False)
 
     # Create a DataFrame to display NaN counts and percentages
-    nan_summary = pd.df({
+    nan_summary = pd.DataFrame({
         'NaN Count': nan_counts,
         'NaN Percentage': nan_percentage.round(2)
     })
@@ -359,7 +360,7 @@ import seaborn as sns
 from scipy import stats
 from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
 
-def main_analysis(df, label_column=None, task_type='regression', top_n_features=10):
+def main_analysis(df, x, y, label_column=None, task_type='regression', top_n_features=10):
 
     """
     Perform comprehensive Exploratory Data Analysis with feature relationship insights after missig value handling.
@@ -383,7 +384,7 @@ def main_analysis(df, label_column=None, task_type='regression', top_n_features=
 
     
     print("="*70)
-    print("EXPLORATORY DATA ANALYSIS REPORT")
+    print("ExPLORATORY DATA ANALYSIS REPORT")
     print("="*70)
     
     results = {}
@@ -433,7 +434,7 @@ def main_analysis(df, label_column=None, task_type='regression', top_n_features=
         missing_df = missing_df[missing_df['Missing_Count'] > 0]
         print(missing_df.to_string())
         
-        print(f"\n⚠️  Total missing values: {total_missing} ({(total_missing / (df.shape[0] * df.shape[1]) * 100):.2f}% of dataset)")
+        print(f"\n Total missing values: {total_missing} ({(total_missing / (df.shape[0] * df.shape[1]) * 100):.2f}% of dataset)")
     else:
         print("✓ No missing values detected")
     
@@ -476,16 +477,12 @@ def main_analysis(df, label_column=None, task_type='regression', top_n_features=
             print(f"\nClass Imbalance Ratio: {imbalance_ratio:.2f}:1")
             
             if imbalance_ratio > 3:
-                print("⚠️  IMBALANCED DATASET detected!")
-                print("💡 Recommendations:")
-                print("   - Use stratified train-test split")
+                print("!!! IMBALANCED DATASET detected!")
+                print(" Recommendations:")
                 print("   - Consider SMOTE, class weights, or resampling")
-                print("   - Use metrics: F1-score, ROC-AUC, Precision-Recall (not just accuracy)")
-                print("   - Models: XGBoost/LightGBM with scale_pos_weight")
                 results['imbalance_detected'] = True
             else:
-                print("✓ Classes are relatively balanced")
-                print("💡 Can use standard train-test split and accuracy metrics")
+                print("Classes are relatively balanced")
                 results['imbalance_detected'] = False
             
             results['class_distribution'] = class_dist.to_dict()
@@ -499,10 +496,9 @@ def main_analysis(df, label_column=None, task_type='regression', top_n_features=
             print(f"\nTarget Skewness: {target_skew:.3f}")
             
             if abs(target_skew) > 1:
-                print("⚠️  Target is highly skewed!")
-                print("💡 Recommendations:")
+                print("!!! Target is highly skewed!")
+                print(" Recommendations:")
                 print("   - Consider log transformation of target")
-                print("   - Models: Tree-based (XGBoost, RandomForest) handle skewness better")
                 print("   - For linear models: transform target then inverse transform predictions")
                 results['target_skewed'] = True
             else:
@@ -514,24 +510,24 @@ def main_analysis(df, label_column=None, task_type='regression', top_n_features=
         print("-"*70)
         
         # Prepare features for mutual information
-        X_analysis = df.drop(columns=[target_name])
+        x_analysis = df.drop(columns=[target_name])
         
         # Handle categorical variables with label encoding for MI calculation
-        X_encoded = X_analysis.copy()
+        x_encoded = x_analysis.copy()
         for col in categorical_cols:
-            if col in X_encoded.columns:
-                X_encoded[col] = pd.factorize(X_encoded[col])[0]
+            if col in x_encoded.columns:
+                x_encoded[col] = pd.factorize(x_encoded[col])[0]
         
         # Fill missing values temporarily for MI calculation
-        X_encoded = X_encoded.fillna(X_encoded.median() if len(numeric_cols) > 0 else -1)
+        x_encoded = x_encoded.fillna(x_encoded.median() if len(numeric_cols) > 0 else -1)
         
         # Calculate mutual information
         if task_type == 'classification':
-            mi_scores = mutual_info_classif(X_encoded, target, random_state=42)
+            mi_scores = mutual_info_classif(x_encoded, target, random_state=42)
         else:
-            mi_scores = mutual_info_regression(X_encoded, target, random_state=42)
+            mi_scores = mutual_info_regression(x_encoded, target, random_state=42)
         
-        mi_scores = pd.Series(mi_scores, index=X_encoded.columns).sort_values(ascending=False)
+        mi_scores = pd.Series(mi_scores, index=x_encoded.columns).sort_values(ascending=False)
         
         print(f"\nTop {top_n_features} Most Important Features (Mutual Information):")
         print(mi_scores.head(top_n_features))
@@ -539,8 +535,7 @@ def main_analysis(df, label_column=None, task_type='regression', top_n_features=
         # Identify low importance features
         low_importance = mi_scores[mi_scores < 0.01]
         if len(low_importance) > 0:
-            print(f"\n⚠️  {len(low_importance)} features have very low importance (<0.01)")
-            print("💡 Consider feature selection to reduce dimensionality")
+            print(f"\n  {len(low_importance)} features have very low importance (<0.01)")
         
         results['feature_importance'] = mi_scores.to_dict()
         
@@ -563,7 +558,7 @@ def main_analysis(df, label_column=None, task_type='regression', top_n_features=
             # Check for weak correlations
             weak_corr = correlations[abs(correlations) < 0.1]
             if len(weak_corr) > 0:
-                print(f"\n💡 {len(weak_corr)} features have weak linear correlation with target")
+                print(f"\n {len(weak_corr)} features have weak linear correlation with target")
                 print("   Consider non-linear models (trees, neural networks)")
             
             results['correlations'] = correlations.to_dict()
@@ -587,12 +582,9 @@ def main_analysis(df, label_column=None, task_type='regression', top_n_features=
                         })
             
             if high_corr_pairs:
-                print(f"⚠️  Found {len(high_corr_pairs)} highly correlated feature pairs (>0.8):")
+                print(f" Found {len(high_corr_pairs)} highly correlated feature pairs (>0.8):")
                 for pair in high_corr_pairs[:5]:
                     print(f"  {pair['feature_1']} ↔ {pair['feature_2']}: {pair['correlation']:.3f}")
-                print("\n💡 Recommendations:")
-                print("   - Remove one from each pair OR use PCA/feature selection")
-                print("   - Tree-based models handle multicollinearity better than linear models")
                 results['multicollinearity_detected'] = True
             else:
                 print("✓ No significant multicollinearity detected")
@@ -623,9 +615,7 @@ from scipy import stats
 import warnings
 warnings.filterwarnings('ignore')
 
-from keras.datasets import mnist
 
-(x_train, y_train),(x_test, y_test) = mnist.load_data()
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -639,18 +629,18 @@ class MLOutlierDetector:
     for machine learning classification tasks.
     """
     
-    def __init__(self, X, y, output_file='potential_mistakes.csv'):
+    def __init__(self, x, y, output_file='potential_mistakes.csv'):
         """
         Initialize the detector.
         
         Args:
-            X: Features DataFrame
+            x: Features DataFrame
             y: Labels Series/DataFrame
             output_file: CSV filename to save potential mistakes
         """
-        self.X = X.copy()
+        self.x = x.copy()
         self.y = y.copy() if isinstance(y, pd.Series) else y.copy().squeeze()
-        self.X['original_index'] = X.index
+        self.x['original_index'] = x.index
         self.output_file = output_file
         
     def detect_mislabeled(self, method='knn', n_neighbors=5, contamination=0.1):
@@ -670,7 +660,7 @@ class MLOutlierDetector:
         print(f"{'='*60}\n")
         
         results = []
-        numeric_cols = self.X.select_dtypes(include=[np.number]).columns.tolist()
+        numeric_cols = self.x.select_dtypes(include=[np.number]).columns.tolist()
         if 'original_index' in numeric_cols:
             numeric_cols.remove('original_index')
         
@@ -679,16 +669,16 @@ class MLOutlierDetector:
             from sklearn.neighbors import NearestNeighbors
             
             # Standardize features
-            X_std = (self.X[numeric_cols] - self.X[numeric_cols].mean()) / self.X[numeric_cols].std()
-            X_std = X_std.fillna(0)
+            x_std = (self.x[numeric_cols] - self.x[numeric_cols].mean()) / self.x[numeric_cols].std()
+            x_std = x_std.fillna(0)
             
             # Find nearest neighbors
             knn = NearestNeighbors(n_neighbors=n_neighbors + 1)
-            knn.fit(X_std)
-            distances, indices = knn.kneighbors(X_std)
+            knn.fit(x_std)
+            distances, indices = knn.kneighbors(x_std)
             
             # Check label consistency with neighbors
-            for i in range(len(self.X)):
+            for i in range(len(self.x)):
                 neighbor_indices = indices[i][1:]  # Exclude self
                 neighbor_labels = self.y.iloc[neighbor_indices]
                 current_label = self.y.iloc[i]
@@ -703,7 +693,7 @@ class MLOutlierDetector:
                     suggested_label = neighbor_label_counts.index[0]
                     
                     results.append({
-                        'original_index': self.X.iloc[i]['original_index'],
+                        'original_index': self.x.iloc[i]['original_index'],
                         'current_label': current_label,
                         'suggested_label': suggested_label,
                         'neighbor_agreement': f"{agreement_ratio:.1%}",
@@ -717,28 +707,28 @@ class MLOutlierDetector:
             print(f"Using Isolation Forest per class (contamination={contamination})...")
             from sklearn.ensemble import IsolationForest
             
-            X_std = (self.X[numeric_cols] - self.X[numeric_cols].mean()) / self.X[numeric_cols].std()
-            X_std = X_std.fillna(0)
+            x_std = (self.x[numeric_cols] - self.x[numeric_cols].mean()) / self.x[numeric_cols].std()
+            x_std = x_std.fillna(0)
             
             # Check each class separately
             for label in self.y.unique():
                 class_mask = self.y == label
-                class_indices = self.X[class_mask].index
-                X_class = X_std[class_mask]
+                class_indices = self.x[class_mask].index
+                x_class = x_std[class_mask]
                 
-                if len(X_class) < 3:
+                if len(x_class) < 3:
                     continue
                 
                 iso = IsolationForest(contamination=min(contamination, 0.5), random_state=42)
-                predictions = iso.fit_predict(X_class)
+                predictions = iso.fit_predict(x_class)
                 
                 outlier_mask = predictions == -1
-                outlier_indices = X_class[outlier_mask].index
+                outlier_indices = x_class[outlier_mask].index
                 
                 for idx in outlier_indices:
-                    loc = self.X.index.get_loc(idx)
+                    loc = self.x.index.get_loc(idx)
                     results.append({
-                        'original_index': self.X.iloc[loc]['original_index'],
+                        'original_index': self.x.iloc[loc]['original_index'],
                         'current_label': label,
                         'suggested_label': 'REVIEW',
                         'neighbor_agreement': 'N/A',
@@ -753,9 +743,9 @@ class MLOutlierDetector:
             
             # Add feature values for context
             for idx in mislabeled_df['original_index']:
-                row_loc = self.X[self.X['original_index'] == idx].index[0]
+                row_loc = self.x[self.x['original_index'] == idx].index[0]
                 for col in numeric_cols[:5]:  # Add first 5 features
-                    mislabeled_df.loc[mislabeled_df['original_index'] == idx, col] = self.X.loc[row_loc, col]
+                    mislabeled_df.loc[mislabeled_df['original_index'] == idx, col] = self.x.loc[row_loc, col]
             
             mislabeled_df = mislabeled_df.sort_values('confidence', ascending=False)
             
@@ -781,18 +771,18 @@ class MLOutlierDetector:
             DataFrame with extreme feature values
         """
         print(f"\n{'='*60}")
-        print("DETECTING EXTREME FEATURE VALUES")
+        print("DETECTING ExTREME FEATURE VALUES")
         print(f"{'='*60}\n")
         
         results = []
-        numeric_cols = self.X.select_dtypes(include=[np.number]).columns.tolist()
+        numeric_cols = self.x.select_dtypes(include=[np.number]).columns.tolist()
         if 'original_index' in numeric_cols:
             numeric_cols.remove('original_index')
         
         print(f"Using Z-Score (threshold={z_threshold}) and IQR (multiplier={iqr_multiplier})...\n")
         
         for col in numeric_cols:
-            col_data = self.X[col].dropna()
+            col_data = self.x[col].dropna()
             
             # Z-Score method
             z_scores = np.abs(stats.zscore(col_data))
@@ -811,17 +801,17 @@ class MLOutlierDetector:
             outlier_indices = col_data[combined_outliers].index
             
             for idx in outlier_indices:
-                value = self.X.loc[idx, col]
+                value = self.x.loc[idx, col]
                 z_score = z_scores[col_data.index.get_loc(idx)]
                 
                 results.append({
-                    'original_index': self.X.loc[idx, 'original_index'],
+                    'original_index': self.x.loc[idx, 'original_index'],
                     'feature': col,
                     'value': value,
                     'z_score': f"{z_score:.2f}",
                     'iqr_range': f"[{lower:.2f}, {upper:.2f}]",
                     'label': self.y.loc[idx],
-                    'severity': 'EXTREME' if z_score > z_threshold * 1.5 else 'HIGH',
+                    'severity': 'ExTREME' if z_score > z_threshold * 1.5 else 'HIGH',
                     'reason': f'Z-score={z_score:.2f}, outside IQR range'
                 })
         
@@ -872,7 +862,7 @@ class MLOutlierDetector:
             # Combine both
             if not mislabeled.empty or not extreme.empty:
                 mislabeled['type'] = 'MISLABEL'
-                extreme['type'] = 'EXTREME_FEATURE'
+                extreme['type'] = 'ExTREME_FEATURE'
                 combined = pd.concat([mislabeled, extreme], ignore_index=True)
                 combined.to_csv(self.output_file, index=False)
                 print(f"\n✓ Saved to '{self.output_file}'")
@@ -880,46 +870,46 @@ class MLOutlierDetector:
         return mislabeled, extreme
     
     @staticmethod
-    def remove_rows(X, y, indices_to_remove):
+    def remove_rows(x, y, indices_to_remove):
         """
         Remove confirmed mistakes after manual review.
         
         Args:
-            X: Features DataFrame
+            x: Features DataFrame
             y: Labels Series/DataFrame
             indices_to_remove: List of row indices to remove
             
         Returns:
-            Cleaned X and y
+            Cleaned x and y
         """
-        X_clean = X.drop(indices_to_remove, errors='ignore')
+        x_clean = x.drop(indices_to_remove, errors='ignore')
         y_clean = y.drop(indices_to_remove, errors='ignore')
         
-        removed = len(X) - len(X_clean)
+        removed = len(x) - len(x_clean)
         print(f"\n✓ Removed {removed} rows")
-        print(f"  X: {len(X)} → {len(X_clean)}")
+        print(f"  x: {len(x)} → {len(x_clean)}")
         print(f"  y: {len(y)} → {len(y_clean)}")
         
-        return X_clean, y_clean
+        return x_clean, y_clean
 
 
-# ============= USAGE EXAMPLE =============
+# ============= USAGE ExAMPLE =============
 
 # STEP 1: DETECT MISLABELED INSTANCES (MAIN FUNCTIONALITY)
-detector = MLOutlierDetector(x, y)
+# detector = MLOutlierDetector(x, y)
 
-# Option A: Only detect mislabeled instances
-mislabeled = detector.detect_mislabeled(method='knn', n_neighbors=5)
-mislabeled.to_csv('mislabeled_instances.csv', index=False)
+# # Option A: Only detect mislabeled instances
+# mislabeled = detector.detect_mislabeled(method='knn', n_neighbors=5)
+# mislabeled.to_csv('mislabeled_instances.csv', index=False)
 
 # Option B: Detect both mislabeled + extreme features
-mislabeled, extreme = detector.detect_all(
-    save_separate=True,          # Save in separate CSV files
-    mislabel_method='knn',       # 'knn' or 'isolation'
-    n_neighbors=5,               # For KNN
-    z_threshold=4,               # For extreme features (higher = stricter)
-    iqr_multiplier=3             # For extreme features (higher = stricter)
-)
+# mislabeled, extreme = detector.detect_all(
+#     save_separate=True,          # Save in separate CSV files
+#     mislabel_method='knn',       # 'knn' or 'isolation'
+#     n_neighbors=5,               # For KNN
+#     z_threshold=4,               # For extreme features (higher = stricter)
+#     iqr_multiplier=3             # For extreme features (higher = stricter)
+# )
 
 
 # STEP 2: MANUAL REVIEW
@@ -929,7 +919,7 @@ mislabeled, extreme = detector.detect_all(
 
 # STEP 3: REMOVE CONFIRMED MISTAKES
 # After reviewing, use row indices to remove them
-x_clean, y_clean = MLOutlierDetector.remove_rows(x, y, [45, 67, 89, 103])
+# x_clean, y_clean = MLOutlierDetector.remove_rows(x, y, [45, 67, 89, 103])
 
 # Save cleaned data
 # x_clean.to_csv('x_cleaned.csv', index=False)
@@ -951,12 +941,12 @@ class SafeOneHotEncoder(BaseEstimator, TransformerMixin):
         self.encoders = {}
         self.feature_names = []
         
-    def fit(self, X):
+    def fit(self, x):
         """Fit on training data"""
         self.feature_names = []
-        for col in X.columns:
+        for col in x.columns:
             # Store unique values from training set
-            unique_vals = X[col].fillna('__MISSING__').unique()
+            unique_vals = x[col].fillna('__MISSING__').unique()
             self.encoders[col] = {
                 'categories': set(unique_vals),
                 'mapping': {val: idx for idx, val in enumerate(sorted(unique_vals))}
@@ -968,17 +958,17 @@ class SafeOneHotEncoder(BaseEstimator, TransformerMixin):
             self.feature_names.append(f"{col}___UNSEEN__")
         return self
     
-    def transform(self, X):
+    def transform(self, x):
         """Transform data, handling unseen categories"""
         encoded_data = []
         
-        for col in X.columns:
-            col_data = X[col].fillna('__MISSING__')
+        for col in x.columns:
+            col_data = x[col].fillna('__MISSING__')
             categories = self.encoders[col]['categories']
             
             # Create one-hot encoded matrix
             n_known = len(categories)
-            encoded_col = np.zeros((len(X), n_known + 1))  # +1 for unseen
+            encoded_col = np.zeros((len(x), n_known + 1))  # +1 for unseen
             
             for idx, val in enumerate(col_data):
                 if val in categories:
@@ -993,12 +983,12 @@ class SafeOneHotEncoder(BaseEstimator, TransformerMixin):
         
         # Concatenate all encoded columns
         result = np.hstack(encoded_data)
-        return pd.DataFrame(result, columns=self.feature_names, index=X.index)
+        return pd.DataFrame(result, columns=self.feature_names, index=x.index)
     
-    def fit_transform(self, X):
+    def fit_transform(self, x):
         """Fit and transform in one step"""
-        self.fit(X)
-        return self.transform(X)
+        self.fit(x)
+        return self.transform(x)
 
 
 def encode_and_scale_features(x_train, x_test, scaler=None, verbose=True):
@@ -1142,34 +1132,32 @@ def encode_labels(y_train, y_test, verbose=True):
     return y_train_encoded, y_test_encoded, label_encoder
 
 
-# Example usage:
-if __name__ == "__main__":
-    # Assuming x_train, x_test, y_train, y_test are already defined
+# # Example usage:
+# if __name__ == "__main__":
+#     # Assuming x_train, x_test, y_train, y_test are already defined
     
-    # Encode and scale features
-    x_train_final, x_test_final, encoders = encode_and_scale_features(
-        x_train, 
-        x_test, 
-        scaler=StandardScaler(),  # Can use RobustScaler(), MinMaxScaler(), etc.
-        verbose=True
-    )
+#     # Encode and scale features
+#     x_train_final, x_test_final, encoders = encode_and_scale_features(
+#         x_train, 
+#         x_test, 
+#         scaler=StandardScaler(),  # Can use RobustScaler(), MinMaxScaler(), etc.
+#         verbose=True
+#     )
     
-    # Encode labels
-    y_train_encoded, y_test_encoded, label_encoder = encode_labels(
-        y_train, 
-        y_test, 
-        verbose=True
-    )
+#     # Encode labels
+#     y_train_encoded, y_test_encoded, label_encoder = encode_labels(
+#         y_train, 
+#         y_test, 
+#         verbose=True
+#     )
     
-    print("\n" + "="*50)
-    print("PREPROCESSING COMPLETE")
-    print("="*50)
-    print("\nFinal Variables:")
-    print(f"- x_train_final: {x_train_final.shape}")
-    print(f"- x_test_final: {x_test_final.shape}")
-    print(f"- y_train_encoded: {y_train_encoded.shape}")
-    print(f"- y_test_encoded: {y_test_encoded.shape}")
-    print("\nEncoders stored:")
-    print("- encoders['categorical']: For categorical features")
-    print("- encoders['scaler']: For feature scaling")
-    print("- label_encoder: For target labels")
+#     print("PREPROCESSING COMPLETE")
+#     print("\nFinal Variables:")
+#     print(f"- x_train_final: {x_train_final.shape}")
+#     print(f"- x_test_final: {x_test_final.shape}")
+#     print(f"- y_train_encoded: {y_train_encoded.shape}")
+#     print(f"- y_test_encoded: {y_test_encoded.shape}")
+#     print("\nEncoders stored:")
+#     print("- encoders['categorical']: For categorical features")
+#     print("- encoders['scaler']: For feature scaling")
+#     print("- label_encoder: For target labels")
