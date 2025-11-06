@@ -615,14 +615,6 @@ from scipy import stats
 import warnings
 warnings.filterwarnings('ignore')
 
-
-import pandas as pd
-import numpy as np
-from scipy import stats
-import warnings
-warnings.filterwarnings('ignore')
-
-
 class MLOutlierDetector:
     """
     Detects potential mislabeled instances and extreme feature values
@@ -642,6 +634,8 @@ class MLOutlierDetector:
         self.y = y.copy() if isinstance(y, pd.Series) else y.copy().squeeze()
         self.x['original_index'] = x.index
         self.output_file = output_file
+        self.mislabeled_indices = []
+        self.extreme_indices = []
         
     def detect_mislabeled(self, method='knn', n_neighbors=5, contamination=0.1):
         """
@@ -749,6 +743,9 @@ class MLOutlierDetector:
             
             mislabeled_df = mislabeled_df.sort_values('confidence', ascending=False)
             
+            # Store indices internally
+            self.mislabeled_indices = mislabeled_df['original_index'].tolist()
+            
             print(f"\n✓ Found {len(mislabeled_df)} potentially mislabeled instances")
             print(f"\nTop suspected mislabels:")
             print(mislabeled_df[['original_index', 'current_label', 'suggested_label', 'confidence', 'reason']].head(10).to_string(index=False))
@@ -819,6 +816,9 @@ class MLOutlierDetector:
             extreme_df = pd.DataFrame(results)
             extreme_df = extreme_df.sort_values('z_score', ascending=False)
             
+            # Store indices internally
+            self.extreme_indices = extreme_df['original_index'].unique().tolist()
+            
             print(f"✓ Found {len(extreme_df)} extreme feature values across {extreme_df['original_index'].nunique()} rows")
             print(f"\nTop extreme values:")
             print(extreme_df[['original_index', 'feature', 'value', 'z_score', 'severity']].head(10).to_string(index=False))
@@ -869,63 +869,78 @@ class MLOutlierDetector:
         
         return mislabeled, extreme
     
-    @staticmethod
-    def remove_rows(x, y, indices_to_remove):
+    def remove_rows(self, indices_to_remove="all"):
         """
         Remove confirmed mistakes after manual review.
         
         Args:
-            x: Features DataFrame
-            y: Labels Series/DataFrame
-            indices_to_remove: List of row indices to remove
+            indices_to_remove: Can be:
+                - "mislabeled": Remove only mislabeled instances
+                - "extreme": Remove only extreme feature instances
+                - "all": Remove both mislabeled and extreme (DEFAULT)
+                - List of indices: Remove specific row indices
             
         Returns:
             Cleaned x and y
         """
-        x_clean = x.drop(indices_to_remove, errors='ignore')
-        y_clean = y.drop(indices_to_remove, errors='ignore')
+        if isinstance(indices_to_remove, str):
+            if indices_to_remove == "mislabeled":
+                indices = self.mislabeled_indices
+                print(f"Removing {len(indices)} mislabeled instances...")
+            elif indices_to_remove == "extreme":
+                indices = self.extreme_indices
+                print(f"Removing {len(indices)} extreme feature instances...")
+            elif indices_to_remove == "all":
+                indices = list(set(self.mislabeled_indices + self.extreme_indices))
+                print(f"Removing all flagged instances ({len(self.mislabeled_indices)} mislabeled + {len(self.extreme_indices)} extreme = {len(indices)} unique)...")
+            else:
+                raise ValueError(f"Invalid string option: '{indices_to_remove}'. Use 'mislabeled', 'extreme', or 'all'")
+        else:
+            indices = indices_to_remove
+            print(f"Removing {len(indices)} manually specified instances...")
         
-        removed = len(x) - len(x_clean)
+        if not indices:
+            print("⚠ No indices to remove!")
+            return self.x.drop('original_index', axis=1, errors='ignore'), self.y
+        
+        x_clean = self.x.drop(indices, errors='ignore')
+        y_clean = self.y.drop(indices, errors='ignore')
+        
+        removed = len(self.x) - len(x_clean)
         print(f"\n✓ Removed {removed} rows")
-        print(f"  x: {len(x)} → {len(x_clean)}")
-        print(f"  y: {len(y)} → {len(y_clean)}")
+        print(f"  x: {len(self.x)} → {len(x_clean)}")
+        print(f"  y: {len(self.y)} → {len(y_clean)}")
         
+        # Remove original_index column
+        x_clean = x_clean.drop('original_index', axis=1, errors='ignore')
         return x_clean, y_clean
 
 
 # ============= USAGE ExAMPLE =============
 
-# STEP 1: DETECT MISLABELED INSTANCES (MAIN FUNCTIONALITY)
+# CORRECT WAY:
+# Step 1: Create detector instance
 # detector = MLOutlierDetector(x, y)
 
-# # Option A: Only detect mislabeled instances
-# mislabeled = detector.detect_mislabeled(method='knn', n_neighbors=5)
-# mislabeled.to_csv('mislabeled_instances.csv', index=False)
+# Step 2: Run detection
+# mislabeled_df, extreme_df = detector.detect_all()
 
-# Option B: Detect both mislabeled + extreme features
-# mislabeled, extreme = detector.detect_all(
-#     save_separate=True,          # Save in separate CSV files
-#     mislabel_method='knn',       # 'knn' or 'isolation'
-#     n_neighbors=5,               # For KNN
-#     z_threshold=4,               # For extreme features (higher = stricter)
-#     iqr_multiplier=3             # For extreme features (higher = stricter)
-# )
+# Step 3: Remove instances (multiple options)
 
+# Option A: Remove all flagged instances (DEFAULT)
+# x_clean, y_clean = detector.remove_rows("all")
 
-# STEP 2: MANUAL REVIEW
-# Review 'mislabeled_instances.csv' and 'extreme_features.csv'
-# Identify actual mistakes
+# Option B: Remove only mislabeled instances
+# x_clean, y_clean = detector.remove_rows("mislabeled")
 
+# Option C: Remove only extreme feature instances
+# x_clean, y_clean = detector.remove_rows("extreme")
 
-# STEP 3: REMOVE CONFIRMED MISTAKES
-# After reviewing, use row indices to remove them
-# x_clean, y_clean = MLOutlierDetector.remove_rows(x, y, [45, 67, 89, 103])
+# Option D: Remove specific indices after manual review
+# x_clean, y_clean = detector.remove_rows([45, 67, 89, 103])
 
-# Save cleaned data
-# x_clean.to_csv('x_cleaned.csv', index=False)
-# y_clean.to_csv('y_cleaned.csv', index=False)
-
-    
+# Option E: No parameter defaults to "all"
+# x_clean, y_clean = detector.remove_rows()
 
 
 import pandas as pd
@@ -1012,10 +1027,6 @@ def encode_and_scale_features(x_train, x_test, scaler=None, verbose=True):
         Scaled and encoded training features
     x_test_final : pd.DataFrame
         Scaled and encoded test features
-    encoders : dict
-        Dictionary containing fitted encoders:
-        - 'categorical': SafeOneHotEncoder for categorical features
-        - 'scaler': Fitted scaler object
     """
     if scaler is None:
         scaler = StandardScaler()
@@ -1086,13 +1097,13 @@ def encode_and_scale_features(x_train, x_test, scaler=None, verbose=True):
         print(f"Final training set shape: {x_train_final.shape}")
         print(f"Final test set shape: {x_test_final.shape}")
     
-    # Return results and encoders
+    # Return results
     encoders = {
         'categorical': cat_encoder,
         'scaler': scaler
     }
     
-    return x_train_final, x_test_final, encoders
+    return x_train_final, x_test_final
 
 
 def encode_labels(y_train, y_test, verbose=True):
@@ -1114,8 +1125,6 @@ def encode_labels(y_train, y_test, verbose=True):
         Encoded training labels
     y_test_encoded : np.ndarray
         Encoded test labels
-    label_encoder : LabelEncoder
-        Fitted label encoder
     """
     if verbose:
         print("\n--- Encoding Labels ---")
@@ -1129,7 +1138,7 @@ def encode_labels(y_train, y_test, verbose=True):
         print(f"Encoded training labels shape: {y_train_encoded.shape}")
         print(f"Encoded test labels shape: {y_test_encoded.shape}")
     
-    return y_train_encoded, y_test_encoded, label_encoder
+    return y_train_encoded, y_test_encoded
 
 
 # # Example usage:
@@ -1137,7 +1146,7 @@ def encode_labels(y_train, y_test, verbose=True):
 #     # Assuming x_train, x_test, y_train, y_test are already defined
     
 #     # Encode and scale features
-#     x_train_final, x_test_final, encoders = encode_and_scale_features(
+#     x_train_final, x_test_final = encode_and_scale_features(
 #         x_train, 
 #         x_test, 
 #         scaler=StandardScaler(),  # Can use RobustScaler(), MinMaxScaler(), etc.
@@ -1145,7 +1154,7 @@ def encode_labels(y_train, y_test, verbose=True):
 #     )
     
 #     # Encode labels
-#     y_train_encoded, y_test_encoded, label_encoder = encode_labels(
+#     y_train_encoded, y_test_encoded,  = encode_labels(
 #         y_train, 
 #         y_test, 
 #         verbose=True

@@ -1,0 +1,6 @@
+original_index,current_label,suggested_label,neighbor_agreement,neighbors_with_different_label,avg_distance_to_neighbors,confidence,reason,14.23,1.71,2.43,15.6,127
+70.0,2,1,40.0%,3,3.199161362322392,MEDIUM,3/5 neighbors have different labels,13.86,1.51,2.67,25.0,86.0
+94.0,2,1,40.0%,3,4.052496311575162,MEDIUM,3/5 neighbors have different labels,12.47,1.52,2.2,19.0,162.0
+72.0,2,1,0.0%,5,4.15027214369824,HIGH,5/5 neighbors have different labels,12.99,1.67,2.6,30.0,139.0
+82.0,2,3,20.0%,4,2.3117529307976725,HIGH,4/5 neighbors have different labels,13.05,3.86,2.32,22.5,85.0
+117.0,2,3,0.0%,5,2.788356243543844,HIGH,5/5 neighbors have different labels,12.77,3.43,1.98,16.0,80.0

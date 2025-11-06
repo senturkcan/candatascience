@@ -1,0 +1,2 @@
+original_index,feature,value,z_score,iqr_range,label,severity,reason
+94,127,162,4.42,"[31.00, 164.00]",2,HIGH,"Z-score=4.42, outside IQR range"
