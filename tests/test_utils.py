@@ -289,7 +289,7 @@ def _clean_dataframe(df, remove_duplicate):
     # ds, x, y = extract(label_column="target", dataset_path="database.db", 
     #                    sql_table="training_data")
     
-    pass
+
 
 
 
@@ -941,12 +941,6 @@ class MLOutlierDetector:
 
 # Option E: No parameter defaults to "all"
 # x_clean, y_clean = detector.remove_rows()
-
-
-import pandas as pd
-import numpy as np
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.base import TransformerMixin, BaseEstimator
 
 
 class SafeOneHotEncoder(BaseEstimator, TransformerMixin):
