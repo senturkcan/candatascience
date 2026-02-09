@@ -29,7 +29,7 @@ handle missing values and other basic issues like column names
 
 3- exporatory data analysis -> includes feature relationships for feature extraction
 
-4-dataset shuffle &split
+4-dataset shuffle & split
 
 5*- encoding (handling categorical data) and maybe discretization
 
